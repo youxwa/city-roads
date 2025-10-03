@@ -95,16 +95,22 @@ export default {
       clicked: false,
       showWarning: hasValidArea, 
       mainActionText: hasValidArea ? 'Download Area' : FIND_TEXT,
-      suggestions: []
+      suggestions: [],
+      suggestionTimer: null,
+      suggestionFetchId: 0,
+      lastSuggestionQuery: null
     }
   },
   watch: {
-    enteredInput() {
+    enteredInput(newValue) {
       // As soon as they change it, we need not to download:
       this.mainActionText = FIND_TEXT;
       this.showWarning = false;
       this.hideInput = false;
+      this.error = false;
+      this.noRoads = false;
       appState.unsetPlace();
+      this.scheduleSuggestionLookup(newValue);
     }
   },
   mounted() {
@@ -116,15 +122,25 @@ export default {
   beforeUnmount() {
     if (this.lastCancel) this.lastCancel();
     clearInterval(this.notifyStillLoading);
+    if (this.suggestionTimer) clearTimeout(this.suggestionTimer);
   },
   methods: {
     onSubmit() {
       queryState.set('q', this.enteredInput);
       this.cancelRequest()
-      this.suggestions = [];
       this.noRoads = false;
       this.error = false;
       this.showWarning = false;
+      if (this.suggestionTimer) {
+        clearTimeout(this.suggestionTimer);
+        this.suggestionTimer = null;
+      }
+
+      const query = (this.enteredInput || '').trim();
+      if (!query) {
+        this.resetSuggestions();
+        return;
+      }
 
       const restoredState = restoreStateFromQueryString(this.enteredInput);
       if (restoredState) {
@@ -132,24 +148,73 @@ export default {
         return;
       }
 
-      this.loading = 'Searching cities that match your query...'
-      findBoundaryByName(this.enteredInput)
+      this.fetchSuggestions(query, { showLoading: true });
+    },
+
+    scheduleSuggestionLookup(rawValue) {
+      if (this.suggestionTimer) {
+        clearTimeout(this.suggestionTimer);
+        this.suggestionTimer = null;
+      }
+
+      const query = (rawValue || '').trim();
+      if (!query) {
+        this.resetSuggestions();
+        this.lastSuggestionQuery = null;
+        return;
+      }
+
+      this.suggestionTimer = setTimeout(() => {
+        this.suggestionTimer = null;
+        if (query === this.lastSuggestionQuery) return;
+        this.fetchSuggestions(query);
+      }, 250);
+    },
+
+    resetSuggestions() {
+      this.suggestions = [];
+      this.suggestionsLoaded = false;
+      this.hideInput = false;
+    },
+
+    fetchSuggestions(query, options = {}) {
+      const { showLoading = false } = options;
+      const fetchId = ++this.suggestionFetchId;
+      this.lastSuggestionQuery = query;
+      this.suggestionsLoaded = false;
+      this.error = false;
+      if (showLoading) {
+        this.loading = 'Searching cities that match your query...';
+      }
+
+      return findBoundaryByName(query)
         .then(suggestions => {
-          this.loading = null;
-          this.hideInput = suggestions && suggestions.length;
-          if (this.boxInTheMiddle) {
-            // let animation that moves input box proceed a bit
-            this.boxInTheMiddle = false; // This triggers transition
-            // wait for it and then set the suggestions:
-            setTimeout(() => {
-              this.suggestionsLoaded = true;
-              this.suggestions = suggestions;
-            }, 50)
-          } else {
-              this.suggestionsLoaded = true;
-              this.suggestions = suggestions; 
-          }
+          if (fetchId !== this.suggestionFetchId) return;
+          if (showLoading) this.loading = null;
+          this.applySuggestions(suggestions || []);
+        })
+        .catch(err => {
+          if (fetchId !== this.suggestionFetchId) return;
+          if (showLoading) this.loading = null;
+          console.error(err);
+          this.error = err;
         });
+    },
+
+    applySuggestions(suggestions) {
+      this.hideInput = suggestions && suggestions.length;
+      if (this.boxInTheMiddle) {
+        // let animation that moves input box proceed a bit
+        this.boxInTheMiddle = false; // This triggers transition
+        // wait for it and then set the suggestions:
+        setTimeout(() => {
+          this.suggestionsLoaded = true;
+          this.suggestions = suggestions;
+        }, 50)
+      } else {
+        this.suggestionsLoaded = true;
+        this.suggestions = suggestions;
+      }
     },
 
     getBugReportURL(error) {
