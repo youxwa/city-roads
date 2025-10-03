@@ -6,11 +6,11 @@ import { visualizer } from "rollup-plugin-visualizer";
 
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [vue(), visualizer({
   //  template: 'network'
   })],
-  base: '',
+  base: command === 'build' ? '/city-roads/' : '/',
   server: {
     port: 8080
   },
@@ -19,4 +19,4 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   }
-})
+}))
