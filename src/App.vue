@@ -41,8 +41,8 @@
     </div>
   </div>
 
-  <editable-label v-if='placeFound' v-model='name' class='city-name' :printable='true' :style='{color: labelColorRGBA}' :overlay-manager='overlayManager'></editable-label>
-  <div v-if='placeFound' class='license printable can-drag' :style='{color: labelColorRGBA}'>data <a href='https://www.openstreetmap.org/about/' target="_blank" :style='{color: labelColorRGBA}'>© OpenStreetMap</a></div>
+  <editable-label v-if='placeFound' v-model='name' class='city-name' :style='{color: labelColorRGBA}' :overlay-manager='overlayManager'></editable-label>
+  <div v-if='placeFound' class='license can-drag' :style='{color: labelColorRGBA}'>data <a href='https://www.openstreetmap.org/about/' target="_blank" :style='{color: labelColorRGBA}'>© OpenStreetMap</a></div>
 </template>
 
 <script>
