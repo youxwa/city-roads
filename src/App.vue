@@ -3,10 +3,9 @@
   <div id="app">
     <div v-if='placeFound'>
       <div class='controls'>
-        <a href="#" class='print-button' @click.prevent='toggleSettings'>Customize...</a>
         <a href="#" class='try-another' @click.prevent='startOver'>Try another city</a>
       </div>
-      <div v-if='showSettings' class='print-window'>
+      <div class='print-window'>
         <h3>Display</h3>
         <div class='row'>
           <div class='col'>Colors</div>
@@ -19,22 +18,6 @@
         </div>
 
         <h3>Export</h3>
-        <div class='row'>
-          <a href='#' @click.prevent='zazzleMugPrint()' class='col'>Onto a mug</a> 
-          <span class='col c-2'>
-            Print what you see onto a mug. <br/>Get a unique gift of your favorite city.
-          </span>
-        </div>
-        <div class='preview-actions message' v-if='zazzleLink || generatingPreview'>
-            <div v-if='zazzleLink' class='padded popup-help'>
-              If your browser has blocked the new window, <br/>please <a :href='zazzleLink' target='_blank'>click here</a>
-              to open it.
-            </div>
-            <div v-if='generatingPreview' class='loading-container'>
-              <loading-icon></loading-icon>
-              Generating preview url...
-            </div>
-        </div>
         <div class='row'>
           <a href='#'  @click.prevent='toPNGFile' class='col'>As an image (.png)</a> 
           <span class='col c-2'>
@@ -54,18 +37,6 @@
             Save the current data as a protobuf message. For developer use only.
           </span>
         </div>
-
-        <h3>About</h3>
-        <div>
-          <p>This website was created by <a href='https://twitter.com/anvaka' target='_blank'>@anvaka</a>.
-          It downloads roads from OpenStreetMap and renders them with WebGL.
-          </p>
-          <p>
-           You can find the entire <a href='https://github.com/anvaka/city-roads'>source code here</a>. 
-           If you love this website you can also <a href='https://www.paypal.com/paypalme2/anvakos/3'>buy me a coffee</a> or 
-           <a href='https://www.patreon.com/anvaka'>support me on Patreon</a>, but you don't have to.
-          </p>
-        </div>
       </div>
     </div>
   </div>
@@ -76,14 +47,12 @@
 
 <script>
 import FindPlace from './components/FindPlace.vue';
-import LoadingIcon from './components/LoadingIcon.vue';
 import EditableLabel from './components/EditableLabel.vue';
 import ColorPicker from './components/ColorPicker.vue';
 import createScene from './lib/createScene.js';
 import GridLayer from './lib/GridLayer.js';
-import generateZazzleLink from './lib/getZazzleLink.js';
 import appState from './lib/appState.js';
-import {getPrintableCanvas, getCanvas} from './lib/saveFile.js';
+import {getCanvas} from './lib/saveFile.js';
 import config from './config.js';
 import './lib/canvas2BlobPolyfill.js';
 import bus from './lib/bus.js';
@@ -102,7 +71,6 @@ export default {
   name: 'App',
   components: {
     FindPlace,
-    LoadingIcon,
     EditableLabel,
     ColorPicker
   },
@@ -110,10 +78,6 @@ export default {
     return {
       placeFound: false,
       name: '',
-      zazzleLink: null,
-      generatingPreview: false,
-      showSettings: false,
-      settingsOpen: false,
       labelColor: config.getLabelColor().toRgb(),
       backgroundColor: config.getBackgroundColor().toRgb(),
       layers: []
@@ -125,7 +89,6 @@ export default {
     }
   },
   created() {
-    bus.on('scene-transform', this.handleSceneTransform);
     bus.on('background-color', this.syncBackground);
     bus.on('line-color', this.syncLineColor);
     this.overlayManager = createOverlayManager();
@@ -134,7 +97,6 @@ export default {
     debugger;
     this.overlayManager.dispose();
     this.dispose();
-    bus.off('scene-transform', this.handleSceneTransform);
     bus.off('background-color', this.syncBackground);
     bus.off('line-color', this.syncLineColor);
   },
@@ -144,12 +106,6 @@ export default {
         this.scene.dispose();
         window.scene = null;
       }
-    },
-    toggleSettings() {
-      this.showSettings = !this.showSettings;
-    },
-    handleSceneTransform() {
-      this.zazzleLink = null;
     },
     onGridLoaded(grid) {
       if (grid.isArea) {
@@ -186,8 +142,6 @@ export default {
 
       this.dispose();
       this.placeFound = false;
-      this.zazzleLink = null;
-      this.showSettings = false;
       this.backgroundColor = config.getBackgroundColor().toRgb();
       this.labelColor = config.getLabelColor().toRgb();
 
@@ -218,7 +172,6 @@ export default {
         }
         let layerColor = tinycolor.fromRatio(layer.color);
         newLayers.push(new ColorLayer(name, layerColor, newColor => {
-          this.zazzleLink = null;
           layer.color = toRatioColor(newColor);
           renderer.renderFrame();
           this.scene.fire('color-change', layer);
@@ -235,7 +188,6 @@ export default {
       function toRatioColor(c) {
         return {r: c.r/0xff, g: c.g/0xff, b: c.b/0xff, a: c.a}
       }
-      this.zazzleLink = null;
     },
 
     syncLineColor() {
@@ -246,36 +198,9 @@ export default {
       this.backgroundColor = newBackground.toRgb();
       this.updateLayers()
     },
-    // TODO: I need two background methods?
-    updateBackground() {
-      this.setBackgroundColor(this.backgroundColor)
-      this.zazzleLink = null;
-    },
     setBackgroundColor(c) {
       this.scene.background = c;
       document.body.style.backgroundColor = toRGBA(c);
-      this.zazzleLink = null;
-    },
-
-    zazzleMugPrint() {
-      if (this.zazzleLink) {
-        window.open(this.zazzleLink, '_blank');
-        recordOpenClick(this.zazzleLink);
-        return;
-      }
-
-      this.generatingPreview = true;
-      getPrintableCanvas(this.scene).then(printableCanvas => {
-        generateZazzleLink(printableCanvas).then(link => {
-          this.zazzleLink = link;
-          window.open(link, '_blank');
-          recordOpenClick(link);
-          this.generatingPreview = false;
-        }).catch(e => {
-          this.error = e;
-          this.generatingPreview = false;
-        });
-      });
     }
   }
 }
@@ -284,14 +209,6 @@ function toRGBA(c) {
     return `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a})`;
 }
 
-function recordOpenClick(link) {
-  if (typeof gtag === 'undefined') return;
-
-  gtag('event', 'click', {
-    'event_category': 'Outbound Link',
-    'event_label': link
-  });
-}
 </script>
 
 <style lang='stylus'>
@@ -354,13 +271,6 @@ function recordOpenClick(link) {
     flex: 1;
   }
 
-  a.print-button {
-    flex: 1;
-    border-right: 1px solid border-color;
-    &:focus {
-      border: 1px dashed highlight-color;
-    }
-  }
 }
 
 .col {
@@ -425,24 +335,6 @@ a:focus {
   border-top: 1px solid border-color
   border-bottom: 1px solid border-color
   background: #F5F5F5;
-}
-
-.preview-actions {
-  display: flex;
-  padding: 8px 0;
-  margin-left: -8px;
-  margin-bottom: 14px;
-  margin-top: 1px;
-  width: desktop-controls-width;
-  flex-direction: column;
-  align-items: stretch;
-  font-size: 14px;
-  align-items: center;
-  display: flex;
-
-  .popup-help {
-    text-align: center;
-  }
 }
 
 .city-name {
